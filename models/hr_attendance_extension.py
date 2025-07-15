@@ -2,6 +2,7 @@
 
 from odoo import models, fields, api
 from datetime import datetime, timedelta
+import pytz
 
 
 class hr_attendance_extension(models.Model):   
@@ -27,7 +28,27 @@ class hr_attendance_extension(models.Model):
             ('check_in', '>=', start),
             ('check_in', '<', end),
             ('check_out', '!=', False),
-        ])
+        ])      
+        
+        now = fields.Datetime.now()      
+
+        # Retrieve the last attendance
+        last_attendance = self.search([
+            ('employee_id', '=', employee_id),
+            ('check_in', '<', now),
+            ('check_in', '>=', start),
+            ('check_in', '<', end),
+            ('check_out', '=', False)
+        ], limit=1, order='check_in desc')
+
+        # If last attendance exists add it to the attendances list
+        if last_attendance:            
+            simulated_attendance = self.new({
+                'check_in': last_attendance.check_in,
+                'check_out': now,
+            })
+            # Append it in memory
+            attendances |= simulated_attendance
 
         return sum(
             (a.check_out - a.check_in).total_seconds() / 3600
@@ -106,7 +127,12 @@ class hr_attendance_extension(models.Model):
         if last_attendance:
             return last_attendance.read(['id', 'check_in', 'check_out', 'employee_id'])[0]
         
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Get the user time zone difference to adjust the start and the end of the current day         
+        user_tz = pytz.timezone(self.env.user.tz or 'UTC')
+        localized_now = pytz.utc.localize(now).astimezone(user_tz)
+        local_start = localized_now.replace(hour=0, minute=0, second=0, microsecond=0)
+           
+        today_start = local_start.astimezone(pytz.utc)        
         today_end = today_start + timedelta(days=1)
       
         # Get all today's attendances ordered by check_in
@@ -124,7 +150,7 @@ class hr_attendance_extension(models.Model):
             if current.check_out and next_att.check_in:
                 gap = (next_att.check_in - current.check_out).total_seconds() / 3600
 
-                if gap > 0.9: 
+                if gap > 0.75: 
                     return next_att.read(['id', 'check_in', 'check_out', 'employee_id'])[0]
 
         return None
