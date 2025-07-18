@@ -16,7 +16,7 @@
 
     # always loaded
     'data': [ 
-
+        'data/cron_auto_checkout_attendances.xml'
     ],   
 
     'assets': {
@@ -24,4 +24,6 @@
             'hr_attendance_extension/static/src/js/attendance_extension.js',            
         ],       
     },
+
+    'post_init_hook': 'set_cron_nextcall',
 }

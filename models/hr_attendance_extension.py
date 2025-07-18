@@ -154,3 +154,37 @@ class hr_attendance_extension(models.Model):
                     return next_att.read(['id', 'check_in', 'check_out', 'employee_id'])[0]
 
         return None
+    
+
+    @api.model
+    def get_cutoff_hour(self):
+        cutoff_hour = self.env['ir.config_parameter'].sudo().get_param('CUTOFF_HOUR')
+        return int(cutoff_hour)
+    
+    
+    ## Check out all the open atendances at the cut off hour
+    @api.model
+    def auto_checkout_attendances(self):
+        """Automatically checks out attendances that were not checked out before the cutoff hour."""
+        now = fields.Datetime.now()
+
+        app_tz = pytz.timezone('America/Bogota')
+        localized_now = pytz.utc.localize(now).astimezone(app_tz)
+        local_start = localized_now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        today_start = local_start.astimezone(pytz.utc)
+        cutoff_hour = self.get_cutoff_hour()
+
+        today_cutoff = today_start + timedelta(hours=cutoff_hour)
+               
+        # Update all the attendances that have been checked in and are still opened
+        early_attendances = self.search([
+            ('check_in', '>=', today_start),
+            ('check_in', '<', today_cutoff),
+            ('check_out', '=', False),
+        ], order='check_in asc')
+        
+        check_out = today_cutoff.replace(tzinfo=None)
+        
+        early_attendances.write({'check_out': check_out })  
+     
