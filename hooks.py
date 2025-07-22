@@ -1,25 +1,21 @@
 from datetime import datetime, timedelta
 import pytz
 from odoo import api, SUPERUSER_ID
+from .utils.time_utils import get_cutoff_hour_minutes, APP_TIMEZONE
 
-def set_cron_nextcall(cr, registry):
+def set_cron_nextcall(cr=None, registry=None, env=None):
     """ Sets the 'nextcall' datetime for the auto-checkout attendance cron job based on the configured CUTOFF_HOUR system parameter. Defaults to 19 if not set or invalid."""
-    env = api.Environment(cr, SUPERUSER_ID, {})
+    if not env:
+        env = api.Environment(cr, SUPERUSER_ID, {})
     
-    default_cutoff = 19
-    # Get cutoff hour from system parameter (default to 0 if not set 19)    
-    try:
-        cutoff_hour_str = env['ir.config_parameter'].sudo().get_param('CUTOFF_HOUR')
-        cutoff_hour = int(cutoff_hour_str) if cutoff_hour_str else default_cutoff
-    except Exception:
-        cutoff_hour = default_cutoff    
+    # Get the hour and minutes defined in the system parameters
+    cutoff_hour, cutoff_minutes = get_cutoff_hour_minutes(env)   
 
     # Get the current date/time in the desired timezone
-    tz = pytz.timezone('America/Bogota')
-    now = datetime.now(tz)
+    now = datetime.now(APP_TIMEZONE)
 
     # Set nextcall today at cutoff hour, or tomorrow if that hour has already passed
-    nextcall_dt = now.replace(hour=cutoff_hour, minute=0, second=0, microsecond=0)
+    nextcall_dt = now.replace(hour=cutoff_hour, minute=cutoff_minutes, second=0, microsecond=0)
     if nextcall_dt < now:
         nextcall_dt += timedelta(days=1)
 

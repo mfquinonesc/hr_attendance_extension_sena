@@ -3,6 +3,7 @@
 from odoo import models, fields, api
 from datetime import datetime, timedelta
 import pytz
+from ..utils.time_utils import get_cutoff_hour_minutes, APP_TIMEZONE
 
 
 class hr_attendance_extension(models.Model):   
@@ -155,36 +156,22 @@ class hr_attendance_extension(models.Model):
 
         return None
     
-
-    @api.model
-    def get_cutoff_hour(self):
-        """Retrieves the configured cutoff hour for the attendance checkout process. Defaults to 19 if not set or invalid."""
-        default_cutoff = 19
-        try:
-            cutoff_hour_str = self.env['ir.config_parameter'].sudo().get_param('CUTOFF_HOUR')
-            cutoff_hour = int(cutoff_hour_str) if cutoff_hour_str else default_cutoff
-        except Exception:
-            cutoff_hour = default_cutoff
-
-        return cutoff_hour
-    
     
     @api.model
     def auto_checkout_attendances(self):
         """Automatically checks out attendances that were not checked out before the cutoff hour."""
         now = fields.Datetime.now()
-
-        app_tz = pytz.timezone('America/Bogota')
-        localized_now = pytz.utc.localize(now).astimezone(app_tz)
+        
+        localized_now = pytz.utc.localize(now).astimezone(APP_TIMEZONE)
         local_start = localized_now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         today_start = local_start.astimezone(pytz.utc)
-        cutoff_hour = self.get_cutoff_hour()
+        cutoff_hour, cutoff_minutes  = get_cutoff_hour_minutes(self.env)
 
-        today_cutoff = today_start + timedelta(hours=cutoff_hour)
+        today_cutoff = today_start + timedelta(hours=cutoff_hour, minutes=cutoff_minutes)
 
         if pytz.utc.localize(now) < today_cutoff:            
-            return not (pytz.utc.localize(now) < today_cutoff)
+            return False
                
         # Update all the attendances that have been checked in and are still opened
         early_attendances = self.search([
